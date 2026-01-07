@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Stack Ball 2026: 50 Levels Challenge</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #121212; font-family: 'Arial Black', sans-serif; }
+        canvas { display: block; touch-action: none; }
+        
+        #taskbar { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 55px;
+            background: rgba(0, 0, 0, 0.85); display: flex; justify-content: space-around;
+            align-items: center; color: white; border-bottom: 3px solid #ff0055; z-index: 10;
+        }
+        .stat { font-size: 16px; }
+        .val { color: #00ffcc; font-weight: bold; }
+
+        .screen { 
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.95); color: white; padding: 35px; border-radius: 25px;
+            text-align: center; display: none; border: 4px solid #ff0055; z-index: 100; min-width: 280px;
+        }
+        button { padding: 15px 35px; border: none; border-radius: 35px; background: #00ffcc; color: #000; font-weight: bold; font-size: 20px; cursor: pointer; margin-top: 20px; box-shadow: 0 0 15px #00ffcc; }
+    </style>
+</head>
+<body>
+    <div id="taskbar">
+        <div class="stat">SCORE: <span id="score" class="val">0</span></div>
+        <div class="stat">BEST: <span id="highscore" class="val">0</span></div>
+        <div class="stat">REMAINING: <span id="remain" class="val">50</span></div>
+    </div>
+
+    <div id="game-over" class="screen">
+        <h1 style="color: #ff0055;">OUT! (CRASHED)</h1>
+        <p id="msg-out" style="font-size: 18px;"></p>
+        <button onclick="location.reload()">TRY AGAIN</button>
+    </div>
+
+    <div id="victory" class="screen" style="border-color: #00ffcc;">
+        <h1 style="color: #00ffcc;">🏆 VICTORY!</h1>
+        <p style="font-size: 18px;">CONGRATULATIONS! You cleared all 50 levels.</p>
+        <p id="msg-win" style="font-weight: bold;"></p>
+        <button onclick="location.reload()">PLAY AGAIN</button>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        const scoreEl = document.getElementById("score");
+        const highscoreEl = document.getElementById("highscore");
+        const remainEl = document.getElementById("remain");
+
+        let width, height, score = 0, gameActive = true;
+        let highscore = localStorage.getItem("stack_best_2026") || 0;
+        let ballY = 100, isSmashing = false, rotation = 0;
+        let platforms = [];
+        const totalLevels = 50; // Total 50 platforms
+
+        highscoreEl.innerText = highscore;
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        }
+
+        function initGame() {
+            platforms = [];
+            for (let i = 0; i < totalLevels; i++) {
+                // Har level ke sath color change aur difficulty badhegi
+                let color = i === totalLevels - 1 ? "#FFD700" : `hsl(${i * 7}, 80%, 50%)`;
+                platforms.push({
+                    y: 400 + i * 150,
+                    color: color,
+                    dangerIdx: Math.floor(Math.random() * 8),
+                    speed: 0.04 + (i * 0.001) // Niche wale platforms tez ghumenge
+                });
+            }
+        }
+
+        function draw() {
+            if (!gameActive) return;
+            ctx.clearRect(0, 0, width, height);
+            
+            ctx.save();
+            ctx.translate(0, -ballY + 250);
+
+            // Pillar
+            ctx.fillStyle = "#222";
+            ctx.fillRect(width / 2 - 15, 0, 30, totalLevels * 150 + 600);
+
+            rotation += 0.05;
+
+            platforms.forEach((p, index) => {
+                ctx.save();
+                ctx.translate(width / 2, p.y);
+                // Har platform ki apni speed
+                let pRot = rotation * (p.speed / 0.05);
+
+                for(let i=0; i<8; i++) {
+                    let angle = pRot + (i * Math.PI * 2 / 8);
+                    let isDanger = (i === p.dangerIdx);
+                    ctx.lineWidth = 22;
+                    ctx.strokeStyle = isDanger ? "#000" : p.color;
+                    ctx.beginPath();
+                    ctx.ellipse(0, 0, 85, 30, angle, 0, Math.PI / 3.5);
+                    ctx.stroke();
+
+                    // Real Collision Detection
+                    if (ballY >= p.y - 20 && ballY <= p.y + 25) {
+                        let currentRot = (pRot % (Math.PI * 2));
+                        if (currentRot < 0) currentRot += Math.PI * 2;
+
+                        if (isSmashing) {
+                            // Agar Smash karte waqt Black (Danger) part touch ho
+                            if (isDanger && currentRot > 0.6 && currentRot < 1.4) {
+                                showEndScreen("game-over");
+                            } else {
+                                platforms.splice(index, 1);
+                                score += 10;
+                                scoreEl.innerText = score;
+                                remainEl.innerText = platforms.length;
+                                if (platforms.length === 0) showEndScreen("victory");
+                            }
+                        }
+                    }
+                }
+                ctx.restore();
+            });
+            ctx.restore();
+
+            // Ball (Fire Effect)
+            ctx.fillStyle = isSmashing ? "#ff0055" : "#FFEA00";
+            ctx.shadowBlur = isSmashing ? 30 : 5;
+            ctx.shadowColor = ctx.fillStyle;
+            ctx.beginPath();
+            ctx.arc(width / 2, 250, 20, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            if (isSmashing) ballY += 18;
+            else ballY = platforms.length > 0 ? platforms[0].y - 100 + Math.abs(Math.sin(Date.now() * 0.008) * 75) : 250;
+
+            requestAnimationFrame(draw);
+        }
+
+        function showEndScreen(id) {
+            gameActive = false;
+            let finalMsg = "";
+            if(score > highscore) {
+                highscore = score;
+                localStorage.setItem("stack_best_2026", highscore);
+                finalMsg = "NEW RECORD! You are a Pro.";
+            } else {
+                finalMsg = `Your Score: ${score} | Best: ${highscore}`;
+            }
+
+            document.getElementById(id).style.display = "block";
+            document.getElementById(id === "game-over" ? 'msg-out' : 'msg-win').innerText = finalMsg;
+        }
+
+        window.onmousedown = window.ontouchstart = (e) => { if(gameActive) isSmashing = true; };
+        window.onmouseup = window.ontouchend = () => isSmashing = false;
+        window.addEventListener("resize", resize);
+        
+        resize();
+        initGame();
+        draw();
+    </script>
+</body>
+</html>
